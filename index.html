@@ -2,90 +2,109 @@
 <html lang="zh-TW">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>π乒乓 - 旋轉與擊球模擬系統 (Phase 2-2 Fix1)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>π乒乓 - 旋轉與擊球模擬系統 (Phase 2-2 Fix2)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <style>
         body { margin: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         #canvas-container { width: 100vw; height: 100vh; }
+        /* 浮動控制面板 */
+        #floating-panel {
+            position: absolute;
+            top: 16px;
+            left: 16px;
+            z-index: 50;
+            touch-action: none;
+        }
     </style>
 </head>
 <body class="bg-gray-900 text-white select-none">
 
     <div id="canvas-container"></div>
 
-    <div class="absolute top-4 left-4 bg-gray-800/90 backdrop-blur-md p-4 rounded-xl border border-gray-700 shadow-xl w-84 max-h-[95vh] overflow-y-auto">
-        <h1 class="text-xl font-bold text-emerald-400 mb-1">🏓 π乒乓 旋轉模擬器</h1>
-        <p class="text-xs text-gray-400 mb-3">Phase 2-2 Fix1: 雙色球皮選定 & 發球揮拍動畫</p>
+    <!-- 浮動可拖拽/收闔控制面板 -->
+    <div id="floating-panel" class="bg-gray-800/95 backdrop-blur-md rounded-xl border border-gray-700 shadow-2xl w-80 max-h-[85vh] flex flex-col transition-all duration-200">
         
-        <!-- 常用發球情境預設 -->
-        <div class="mb-3">
-            <label class="text-xs font-bold text-gray-300 block mb-1">🎯 常用發球情境一鍵帶入：</label>
-            <div class="grid grid-cols-2 gap-1.5 text-xs">
-                <button onclick="applyPreset('fh_flat')" class="p-1.5 bg-gray-700 hover:bg-emerald-700 rounded text-left transition border border-gray-600">
-                    🏓 正手平球 (不轉)<br><span class="text-[10px] text-gray-400">14km/h | 200RPM</span>
-                </button>
-                <button onclick="applyPreset('fh_cut')" class="p-1.5 bg-gray-700 hover:bg-emerald-700 rounded text-left transition border border-gray-600">
-                    🌀 正手切球 (下旋)<br><span class="text-[10px] text-gray-400">15km/h | 2500RPM</span>
-                </button>
-                <button onclick="applyPreset('bh_cut')" class="p-1.5 bg-gray-700 hover:bg-emerald-700 rounded text-left transition border border-gray-600">
-                    🔄 反手切球 (下旋)<br><span class="text-[10px] text-gray-400">14km/h | 2200RPM</span>
-                </button>
-                <button onclick="applyPreset('fh_fast')" class="p-1.5 bg-gray-700 hover:bg-emerald-700 rounded text-left transition border border-gray-600">
-                    ⚡ 正手奔球 (急長)<br><span class="text-[10px] text-gray-400">28km/h | 1800RPM</span>
-                </button>
-                <button onclick="applyPreset('fh_top_side')" class="p-1.5 bg-gray-700 hover:bg-emerald-700 rounded text-left transition border border-gray-600">
-                    ↪️ 正手右側上旋<br><span class="text-[10px] text-gray-400">20km/h | 3000RPM</span>
-                </button>
-                <button onclick="applyPreset('bh_left_side')" class="p-1.5 bg-gray-700 hover:bg-emerald-700 rounded text-left transition border border-gray-600">
-                    ↩️ 反手左側下旋<br><span class="text-[10px] text-gray-400">18km/h | 2800RPM</span>
-                </button>
+        <!-- 面板拖拽標題列 Header -->
+        <div id="panel-header" class="p-3 bg-gray-900/90 rounded-t-xl border-b border-gray-700 flex justify-between items-center cursor-move select-none">
+            <div class="flex items-center space-x-1.5">
+                <span class="text-base">🏓</span>
+                <h1 class="text-sm font-bold text-emerald-400">π乒乓 旋轉模擬器</h1>
+            </div>
+            <div class="flex items-center space-x-1 text-xs">
+                <button id="btn-pin" onclick="togglePin()" title="釘選/解鎖位置" class="p-1 hover:bg-gray-700 rounded text-gray-400 hover:text-white transition">📌</button>
+                <button id="btn-toggle" onclick="togglePanel()" title="收闔/展開面板" class="p-1 hover:bg-gray-700 rounded text-gray-400 hover:text-white font-mono transition">[-] </button>
             </div>
         </div>
 
-        <!-- 參數控制區 -->
-        <div class="space-y-2.5 text-xs border-t border-gray-700 pt-2.5">
+        <!-- 面板可折疊內容區 -->
+        <div id="panel-content" class="p-3 overflow-y-auto space-y-2.5 text-xs">
             
-            <!-- 🏓 球皮選擇 (NEW) -->
-            <div class="bg-gray-900/80 p-2.5 rounded border border-gray-700 space-y-1.5">
-                <span class="font-bold text-rose-400 block">🏓 擊球球皮面選擇：</span>
-                <div class="grid grid-cols-2 gap-2">
-                    <label class="flex items-center space-x-2 cursor-pointer bg-gray-800 p-1.5 rounded border border-rose-500/50 hover:bg-gray-700">
+            <!-- 常用發球情境預設 -->
+            <div>
+                <label class="text-[11px] font-bold text-gray-300 block mb-1">🎯 常用發球情境一鍵帶入：</label>
+                <div class="grid grid-cols-2 gap-1 text-[11px]">
+                    <button onclick="applyPreset('fh_flat')" class="p-1 bg-gray-700 hover:bg-emerald-700 rounded text-left transition border border-gray-600">
+                        🏓 正手平球<br><span class="text-[9px] text-gray-400">14km/h | 200RPM</span>
+                    </button>
+                    <button onclick="applyPreset('fh_cut')" class="p-1 bg-gray-700 hover:bg-emerald-700 rounded text-left transition border border-gray-600">
+                        🌀 正手切球<br><span class="text-[9px] text-gray-400">15km/h | 2500RPM</span>
+                    </button>
+                    <button onclick="applyPreset('bh_cut')" class="p-1 bg-gray-700 hover:bg-emerald-700 rounded text-left transition border border-gray-600">
+                        🔄 反手切球<br><span class="text-[9px] text-gray-400">14km/h | 2200RPM</span>
+                    </button>
+                    <button onclick="applyPreset('fh_fast')" class="p-1 bg-gray-700 hover:bg-emerald-700 rounded text-left transition border border-gray-600">
+                        ⚡ 正手奔球<br><span class="text-[9px] text-gray-400">28km/h | 1800RPM</span>
+                    </button>
+                    <button onclick="applyPreset('fh_top_side')" class="p-1 bg-gray-700 hover:bg-emerald-700 rounded text-left transition border border-gray-600">
+                        ↪️ 右側上旋<br><span class="text-[9px] text-gray-400">20km/h | 3000RPM</span>
+                    </button>
+                    <button onclick="applyPreset('bh_left_side')" class="p-1 bg-gray-700 hover:bg-emerald-700 rounded text-left transition border border-gray-600">
+                        ↩️ 左側下旋<br><span class="text-[9px] text-gray-400">18km/h | 2800RPM</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 球皮面選擇 -->
+            <div class="bg-gray-900/80 p-2 rounded border border-gray-700 space-y-1">
+                <span class="font-bold text-rose-400 block text-[11px]">🏓 擊球球皮面選擇：</span>
+                <div class="grid grid-cols-2 gap-1.5">
+                    <label class="flex items-center space-x-1.5 cursor-pointer bg-gray-800 p-1 rounded border border-rose-500/50 hover:bg-gray-700">
                         <input type="radio" name="rubber_side" value="red" checked onchange="updatePositionsFromUI()" class="accent-rose-500">
-                        <span class="text-rose-400 font-bold">🔴 紅面擊球</span>
+                        <span class="text-rose-400 font-bold text-[10px]">🔴 紅面擊球</span>
                     </label>
-                    <label class="flex items-center space-x-2 cursor-pointer bg-gray-800 p-1.5 rounded border border-gray-500/50 hover:bg-gray-700">
+                    <label class="flex items-center space-x-1.5 cursor-pointer bg-gray-800 p-1 rounded border border-gray-500/50 hover:bg-gray-700">
                         <input type="radio" name="rubber_side" value="black" onchange="updatePositionsFromUI()" class="accent-gray-400">
-                        <span class="text-gray-300 font-bold">⚫ 黑面擊球</span>
+                        <span class="text-gray-300 font-bold text-[10px]">⚫ 黑面擊球</span>
                     </label>
                 </div>
             </div>
 
             <!-- 擊球 3D 位置 -->
-            <div class="bg-gray-900/80 p-2.5 rounded border border-gray-700 space-y-2">
-                <div class="flex justify-between items-center mb-1">
-                    <span class="font-bold text-amber-400">📍 擊球點位置:</span>
-                    <span class="text-[10px] text-red-400 font-bold">🔴 端線微小紅點為基準點</span>
+            <div class="bg-gray-900/80 p-2 rounded border border-gray-700 space-y-1.5">
+                <div class="flex justify-between items-center mb-0.5">
+                    <span class="font-bold text-amber-400 text-[11px]">📍 擊球點位置:</span>
+                    <span class="text-[9px] text-red-400 font-bold">🔴 端線紅點為基準</span>
                 </div>
                 <div>
-                    <div class="flex justify-between">
+                    <div class="flex justify-between text-[10px]">
                         <span class="text-gray-300">左右位置 (X)</span>
                         <span id="val-posx" class="text-emerald-400 font-mono">-0.45 m</span>
                     </div>
                     <input type="range" id="input-posx" min="-0.80" max="0.80" value="-0.45" step="0.05" class="w-full accent-emerald-500">
                 </div>
                 <div>
-                    <div class="flex justify-between">
+                    <div class="flex justify-between text-[10px]">
                         <span class="text-gray-300">擊球高度 (Y)</span>
                         <span id="val-posy" class="text-emerald-400 font-mono">0.98 m</span>
                     </div>
                     <input type="range" id="input-posy" min="0.76" max="1.40" value="0.98" step="0.02" class="w-full accent-emerald-500">
                 </div>
                 <div>
-                    <div class="flex justify-between">
-                        <span class="text-gray-300">離桌距離 (Z 端線前後)</span>
+                    <div class="flex justify-between text-[10px]">
+                        <span class="text-gray-300">離桌距離 (Z)</span>
                         <span id="val-posz" class="text-emerald-400 font-mono">1.48 m</span>
                     </div>
                     <input type="range" id="input-posz" min="1.37" max="1.95" value="1.48" step="0.02" class="w-full accent-emerald-500">
@@ -93,76 +112,77 @@
             </div>
 
             <!-- 球拍姿態 -->
-            <div class="bg-gray-900/80 p-2.5 rounded border border-gray-700 space-y-2">
-                <span class="font-bold text-sky-400 block mb-1">📐 球拍姿態 (俯仰與偏角):</span>
+            <div class="bg-gray-900/80 p-2 rounded border border-gray-700 space-y-1.5">
+                <span class="font-bold text-sky-400 block text-[11px]">📐 球拍姿態:</span>
                 <div>
-                    <div class="flex justify-between">
-                        <span class="text-gray-300">拍面俯仰角 (前壓 - / 開拍 +)</span>
-                        <span id="val-racket-pitch" class="text-emerald-400 font-mono">30° (開拍)</span>
+                    <div class="flex justify-between text-[10px]">
+                        <span class="text-gray-300">拍面俯仰角</span>
+                        <span id="val-racket-pitch" class="text-emerald-400 font-mono">30°</span>
                     </div>
                     <input type="range" id="input-racket-pitch" min="-30" max="60" value="30" step="1" class="w-full accent-emerald-500">
                 </div>
                 <div>
-                    <div class="flex justify-between">
-                        <span class="text-gray-300">拍面朝向 (拍尖偏角)</span>
-                        <span id="val-racket-yaw" class="text-emerald-400 font-mono">25° (朝右)</span>
+                    <div class="flex justify-between text-[10px]">
+                        <span class="text-gray-300">拍面朝向</span>
+                        <span id="val-racket-yaw" class="text-emerald-400 font-mono">25°</span>
                     </div>
                     <input type="range" id="input-racket-yaw" min="-60" max="60" value="25" step="1" class="w-full accent-emerald-500">
                 </div>
             </div>
 
             <!-- 動力學參數 -->
-            <div>
-                <div class="flex justify-between mb-1">
-                    <span class="text-gray-300">發球初速 (Speed)</span>
-                    <span id="val-speed" class="text-emerald-400 font-mono">15 km/h</span>
+            <div class="space-y-1.5">
+                <div>
+                    <div class="flex justify-between text-[10px]">
+                        <span class="text-gray-300">發球初速</span>
+                        <span id="val-speed" class="text-emerald-400 font-mono">15 km/h</span>
+                    </div>
+                    <input type="range" id="input-speed" min="8" max="60" value="15" class="w-full accent-emerald-500">
                 </div>
-                <input type="range" id="input-speed" min="8" max="60" value="15" class="w-full accent-emerald-500">
+                <div>
+                    <div class="flex justify-between text-[10px]">
+                        <span class="text-gray-300">旋轉轉速</span>
+                        <span id="val-rpm" class="text-emerald-400 font-mono">2500 RPM</span>
+                    </div>
+                    <input type="range" id="input-rpm" min="0" max="6000" value="2500" step="100" class="w-full accent-emerald-500">
+                </div>
+                <div>
+                    <div class="flex justify-between text-[10px]">
+                        <span class="text-gray-300">上旋(+) / 下旋(-)</span>
+                        <span id="val-topspin" class="text-emerald-400 font-mono">-0.8</span>
+                    </div>
+                    <input type="range" id="input-topspin" min="-1" max="1" value="-0.8" step="0.1" class="w-full accent-emerald-500">
+                </div>
+                <div>
+                    <div class="flex justify-between text-[10px]">
+                        <span class="text-gray-300">右側旋(+) / 左側旋(-)</span>
+                        <span id="val-sidespin" class="text-emerald-400 font-mono">0.0</span>
+                    </div>
+                    <input type="range" id="input-sidespin" min="-1" max="1" value="0" step="0.1" class="w-full accent-emerald-500">
+                </div>
             </div>
 
-            <div>
-                <div class="flex justify-between mb-1">
-                    <span class="text-gray-300">旋轉轉速 (Spin RPM)</span>
-                    <span id="val-rpm" class="text-emerald-400 font-mono">2500 RPM</span>
-                </div>
-                <input type="range" id="input-rpm" min="0" max="6000" value="2500" step="100" class="w-full accent-emerald-500">
-            </div>
-
-            <div>
-                <div class="flex justify-between mb-1">
-                    <span class="text-gray-300">上旋(+) / 下旋(-)</span>
-                    <span id="val-topspin" class="text-emerald-400 font-mono">-0.8 (強下旋)</span>
-                </div>
-                <input type="range" id="input-topspin" min="-1" max="1" value="-0.8" step="0.1" class="w-full accent-emerald-500">
-            </div>
-
-            <div>
-                <div class="flex justify-between mb-1">
-                    <span class="text-gray-300">右側旋(+) / 左側旋(-)</span>
-                    <span id="val-sidespin" class="text-emerald-400 font-mono">0.0 (無側旋)</span>
-                </div>
-                <input type="range" id="input-sidespin" min="-1" max="1" value="0" step="0.1" class="w-full accent-emerald-500">
-            </div>
-
-            <div class="pt-1 grid grid-cols-2 gap-2">
-                <button onclick="startServeAnimation()" class="py-2 bg-emerald-600 hover:bg-emerald-500 rounded text-sm font-bold transition flex items-center justify-center gap-1">
-                    🚀 發球模擬 (揮拍)
+            <!-- 執行按鈕 -->
+            <div class="pt-1 grid grid-cols-2 gap-1.5">
+                <button onclick="startServeAnimation()" class="py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded text-xs font-bold transition flex items-center justify-center gap-1">
+                    🚀 發球模擬
                 </button>
-                <button onclick="resetBall()" class="py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm font-medium transition">
+                <button onclick="resetBall()" class="py-1.5 bg-gray-700 hover:bg-gray-600 rounded text-xs font-medium transition">
                     🔄 重置位置
                 </button>
             </div>
 
-            <button onclick="resetCamera()" class="w-full py-1 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded text-gray-300 text-xs">
+            <button onclick="resetCamera()" class="w-full py-1 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded text-gray-300 text-[10px]">
                 🎥 復位 3D 視角
             </button>
-        </div>
 
-        <div class="mt-3 p-2 bg-gray-950/80 border border-emerald-500/30 rounded-lg text-[11px] text-gray-300 space-y-1">
-            <p class="font-bold text-emerald-400">💡 當前模擬狀態：</p>
-            <p id="info-level" class="text-amber-300">等級：正手切球 (下旋)</p>
-            <p id="info-status" class="text-emerald-400 font-bold">狀態：順暢落檯 🟢</p>
-            <p id="info-desc" class="text-gray-400">已啟用球拍雙面膠皮（紅/黑）與動態發球揮拍軌跡。</p>
+            <!-- 狀態提示 -->
+            <div class="p-1.5 bg-gray-950/80 border border-emerald-500/30 rounded text-[10px] text-gray-300 space-y-0.5">
+                <p id="info-level" class="text-amber-300 font-bold">等級：正手切球 (下旋)</p>
+                <p id="info-status" class="text-emerald-400 font-bold">狀態：順暢落檯 🟢</p>
+                <p id="info-desc" class="text-gray-400 text-[9px]">面板可拖拽移位、收闔與釘選，適合手機瀏覽。</p>
+            </div>
+
         </div>
     </div>
 
@@ -185,13 +205,21 @@
             isFlying: false
         };
 
-        // 動畫控制變數
         let animState = {
             isAnimating: false,
-            phase: 'idle', // 'backswing', 'forward', 'follow', 'idle'
+            phase: 'idle',
             progress: 0,
             racketStartPos: new THREE.Vector3(),
             racketTargetPos: new THREE.Vector3()
+        };
+
+        // UI 控制狀態 (Drag, Collapse, Pin)
+        let uiState = {
+            isCollapsed: false,
+            isPinned: false,
+            isDragging: false,
+            startX: 0, startY: 0,
+            initialLeft: 16, initialTop: 16
         };
 
         function init() {
@@ -221,15 +249,95 @@
 
             createTable();
             createBenchmarkMarker();
-            createRacketWithRubbers(); // 雙面膠皮球拍
+            createRacketWithRubbers();
             createBall();
             initTrajectoryLine();
             bindUIEvents();
+            initPanelDrag();
             
             applyPreset('fh_cut');
 
             window.addEventListener('resize', onWindowResize);
             animate();
+        }
+
+        /* 拖拽與面板縮放邏輯 (Drag & Floating Window Logic) */
+        function initPanelDrag() {
+            const panel = document.getElementById('floating-panel');
+            const header = document.getElementById('panel-header');
+
+            const onPointerDown = (e) => {
+                if (uiState.isPinned) return;
+                uiState.isDragging = true;
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                
+                uiState.startX = clientX;
+                uiState.startY = clientY;
+                
+                const rect = panel.getBoundingClientRect();
+                uiState.initialLeft = rect.left;
+                uiState.initialTop = rect.top;
+
+                window.addEventListener('pointermove', onPointerMove);
+                window.addEventListener('pointerup', onPointerUp);
+                window.addEventListener('touchmove', onPointerMove, { passive: false });
+                window.addEventListener('touchend', onPointerUp);
+            };
+
+            const onPointerMove = (e) => {
+                if (!uiState.isDragging) return;
+                if (e.cancelable) e.preventDefault();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+                const dx = clientX - uiState.startX;
+                const dy = clientY - uiState.startY;
+
+                panel.style.left = `${uiState.initialLeft + dx}px`;
+                panel.style.top = `${uiState.initialTop + dy}px`;
+            };
+
+            const onPointerUp = () => {
+                uiState.isDragging = false;
+                window.removeEventListener('pointermove', onPointerMove);
+                window.removeEventListener('pointerup', onPointerUp);
+                window.removeEventListener('touchmove', onPointerMove);
+                window.removeEventListener('touchend', onPointerUp);
+            };
+
+            header.addEventListener('pointerdown', onPointerDown);
+            header.addEventListener('touchstart', onPointerDown, { passive: true });
+        }
+
+        function togglePanel() {
+            const content = document.getElementById('panel-content');
+            const btn = document.getElementById('btn-toggle');
+            uiState.isCollapsed = !uiState.isCollapsed;
+
+            if (uiState.isCollapsed) {
+                content.classList.add('hidden');
+                btn.innerText = '[+]';
+            } else {
+                content.classList.remove('hidden');
+                btn.innerText = '[-]';
+            }
+        }
+
+        function togglePin() {
+            const btn = document.getElementById('btn-pin');
+            const header = document.getElementById('panel-header');
+            uiState.isPinned = !uiState.isPinned;
+
+            if (uiState.isPinned) {
+                btn.classList.add('text-amber-400');
+                header.classList.remove('cursor-move');
+                header.classList.add('cursor-default');
+            } else {
+                btn.classList.remove('text-amber-400');
+                header.classList.remove('cursor-default');
+                header.classList.add('cursor-move');
+            }
         }
 
         function createTable() {
@@ -264,33 +372,28 @@
             scene.add(benchmarkDot);
         }
 
-        // 建立擁有平面紅黑膠皮與木質夾層的球拍
         function createRacketWithRubbers() {
             racketGroup = new THREE.Group();
 
-            // 1. 木質底板 (Wood Core)
             const woodGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.005, 32);
             const woodMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.5 });
             const woodCore = new THREE.Mesh(woodGeo, woodMat);
             woodCore.rotation.x = Math.PI / 2;
             racketGroup.add(woodCore);
 
-            // 2. 紅色膠皮 (Red Rubber Front)
             const redGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.002, 32);
-            const redMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.2 }); // 鮮亮紅色
+            const redMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.2 });
             const redRubber = new THREE.Mesh(redGeo, redMat);
             redRubber.rotation.x = Math.PI / 2;
-            redRubber.position.z = -0.0035; // 正面
+            redRubber.position.z = -0.0035;
             racketGroup.add(redRubber);
 
-            // 3. 黑色膠皮 (Black Rubber Back)
-            const blackMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.2 }); // 黑色
+            const blackMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.2 });
             const blackRubber = new THREE.Mesh(redGeo, blackMat);
             blackRubber.rotation.x = Math.PI / 2;
-            blackRubber.position.z = 0.0035; // 反面
+            blackRubber.position.z = 0.0035;
             racketGroup.add(blackRubber);
 
-            // 4. 拍柄 (Handle)
             const handleGeo = new THREE.CylinderGeometry(0.012, 0.015, 0.1, 16);
             const handleMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.6 });
             const handle = new THREE.Mesh(handleGeo, handleMat);
@@ -485,7 +588,7 @@
 
         function updateEvaluatorPrompt(bounced, hitNet) {
             let statusTxt = "狀態：順暢落檯 🟢";
-            let descTxt = "已連動選定膠皮面與發球揮拍軌跡。";
+            let descTxt = "控制面板支援拖拽與收闔，行動端觀看極佳。";
 
             if (hitNet) {
                 statusTxt = "狀態：⚠️ 掛網未過網";
@@ -510,19 +613,15 @@
             const topspin = parseFloat(document.getElementById('input-topspin').value);
             const sidespin = parseFloat(document.getElementById('input-sidespin').value);
 
-            // 膠皮選定 (紅面 vs 黑面)
             const rubberSide = document.querySelector('input[name="rubber_side"]:checked').value;
 
             initialPos.set(posX, posY, posZ);
             ball.position.copy(initialPos);
             
-            // 基礎姿態
             racketGroup.position.set(initialPos.x, initialPos.y, initialPos.z + 0.04);
             
             let pitchRad = rackPitch * (Math.PI / 180);
             let yawRad = rackYaw * (Math.PI / 180);
-
-            // 若選擇黑面擊球，球拍自動旋轉 180 度將黑面翻至正面
             let rollRad = (rubberSide === 'black') ? Math.PI : 0;
 
             racketGroup.rotation.set(pitchRad, yawRad, rollRad);
@@ -530,17 +629,16 @@
             document.getElementById('val-posx').innerText = `${posX} m`;
             document.getElementById('val-posy').innerText = `${posY} m`;
             document.getElementById('val-posz').innerText = `${posZ} m`;
-            document.getElementById('val-racket-pitch').innerText = `${rackPitch}° (${rackPitch > 0 ? '開拍' : '前壓'})`;
-            document.getElementById('val-racket-yaw').innerText = `${rackYaw}° (${rackYaw > 0 ? '朝右' : rackYaw < 0 ? '朝左' : '正對'})`;
+            document.getElementById('val-racket-pitch').innerText = `${rackPitch}°`;
+            document.getElementById('val-racket-yaw').innerText = `${rackYaw}°`;
             document.getElementById('val-speed').innerText = `${speed} km/h`;
             document.getElementById('val-rpm').innerText = `${rpm} RPM`;
-            document.getElementById('val-topspin').innerText = topspin > 0 ? `+${topspin} (上旋)` : topspin < 0 ? `${topspin} (下旋)` : '0.0 (不轉)';
-            document.getElementById('val-sidespin').innerText = sidespin > 0 ? `+${sidespin} (右側旋)` : sidespin < 0 ? `${sidespin} (左側旋)` : '0.0 (無側旋)';
+            document.getElementById('val-topspin').innerText = topspin > 0 ? `+${topspin}` : `${topspin}`;
+            document.getElementById('val-sidespin').innerText = sidespin > 0 ? `+${sidespin}` : `${sidespin}`;
 
             updateTrajectoryPrediction();
         }
 
-        // 發球揮拍動畫觸發 (Animation Trigger)
         function startServeAnimation() {
             if (ballState.isFlying || animState.isAnimating) resetBall();
 
@@ -548,9 +646,8 @@
             animState.phase = 'backswing';
             animState.progress = 0;
 
-            // 記錄基準打擊點
             animState.racketTargetPos.set(initialPos.x, initialPos.y, initialPos.z + 0.02);
-            animState.racketStartPos.set(initialPos.x, initialPos.y + 0.1, initialPos.z + 0.25); // 引拍後退位置
+            animState.racketStartPos.set(initialPos.x, initialPos.y + 0.1, initialPos.z + 0.25);
         }
 
         function updateRacketAnimation() {
@@ -559,7 +656,6 @@
             animState.progress += 0.05;
 
             if (animState.phase === 'backswing') {
-                // 1. 引拍：向後向上拉拍
                 racketGroup.position.lerpVectors(
                     new THREE.Vector3(initialPos.x, initialPos.y, initialPos.z + 0.04),
                     animState.racketStartPos,
@@ -570,20 +666,17 @@
                     animState.progress = 0;
                 }
             } else if (animState.phase === 'forward') {
-                // 2. 擊球：快速揮向前接觸球體
                 racketGroup.position.lerpVectors(
                     animState.racketStartPos,
                     animState.racketTargetPos,
                     animState.progress
                 );
                 if (animState.progress >= 1.0) {
-                    // 觸球瞬間！觸發球體物理飛行
                     animState.phase = 'follow';
                     animState.progress = 0;
                     serveBall();
                 }
             } else if (animState.phase === 'follow') {
-                // 3. 隨勢還原
                 const followPos = new THREE.Vector3(initialPos.x, initialPos.y - 0.05, initialPos.z - 0.1);
                 racketGroup.position.lerpVectors(
                     animState.racketTargetPos,
@@ -593,7 +686,7 @@
                 if (animState.progress >= 1.0) {
                     animState.isAnimating = false;
                     animState.phase = 'idle';
-                    updatePositionsFromUI(); // 歸位
+                    updatePositionsFromUI();
                 }
             }
         }
@@ -673,8 +766,8 @@
 
         function animate() {
             requestAnimationFrame(animate);
-            updateRacketAnimation(); // 揮拍動態
-            updatePhysics();         // 球體物理
+            updateRacketAnimation();
+            updatePhysics();
             controls.update();
             renderer.render(scene, camera);
         }
