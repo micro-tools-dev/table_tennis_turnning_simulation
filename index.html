@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>π乒乓 - 旋轉與擊球模擬系統 (Phase 2-2 Fix1)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        #canvas-container { width: 100vw; height: 100vh; }
+    </style>
+</head>
+<body class="bg-gray-900 text-white select-none">
+
+    <div id="canvas-container"></div>
+
+    <div class="absolute top-4 left-4 bg-gray-800/90 backdrop-blur-md p-4 rounded-xl border border-gray-700 shadow-xl w-84 max-h-[95vh] overflow-y-auto">
+        <h1 class="text-xl font-bold text-emerald-400 mb-1">🏓 π乒乓 旋轉模擬器</h1>
+        <p class="text-xs text-gray-400 mb-3">Phase 2-2 Fix1: 雙色球皮選定 & 發球揮拍動畫</p>
+        
+        <!-- 常用發球情境預設 -->
+        <div class="mb-3">
+            <label class="text-xs font-bold text-gray-300 block mb-1">🎯 常用發球情境一鍵帶入：</label>
+            <div class="grid grid-cols-2 gap-1.5 text-xs">
+                <button onclick="applyPreset('fh_flat')" class="p-1.5 bg-gray-700 hover:bg-emerald-700 rounded text-left transition border border-gray-600">
+                    🏓 正手平球 (不轉)<br><span class="text-[10px] text-gray-400">14km/h | 200RPM</span>
+                </button>
+                <button onclick="applyPreset('fh_cut')" class="p-1.5 bg-gray-700 hover:bg-emerald-700 rounded text-left transition border border-gray-600">
+                    🌀 正手切球 (下旋)<br><span class="text-[10px] text-gray-400">15km/h | 2500RPM</span>
+                </button>
+                <button onclick="applyPreset('bh_cut')" class="p-1.5 bg-gray-700 hover:bg-emerald-700 rounded text-left transition border border-gray-600">
+                    🔄 反手切球 (下旋)<br><span class="text-[10px] text-gray-400">14km/h | 2200RPM</span>
+                </button>
+                <button onclick="applyPreset('fh_fast')" class="p-1.5 bg-gray-700 hover:bg-emerald-700 rounded text-left transition border border-gray-600">
+                    ⚡ 正手奔球 (急長)<br><span class="text-[10px] text-gray-400">28km/h | 1800RPM</span>
+                </button>
+                <button onclick="applyPreset('fh_top_side')" class="p-1.5 bg-gray-700 hover:bg-emerald-700 rounded text-left transition border border-gray-600">
+                    ↪️ 正手右側上旋<br><span class="text-[10px] text-gray-400">20km/h | 3000RPM</span>
+                </button>
+                <button onclick="applyPreset('bh_left_side')" class="p-1.5 bg-gray-700 hover:bg-emerald-700 rounded text-left transition border border-gray-600">
+                    ↩️ 反手左側下旋<br><span class="text-[10px] text-gray-400">18km/h | 2800RPM</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- 參數控制區 -->
+        <div class="space-y-2.5 text-xs border-t border-gray-700 pt-2.5">
+            
+            <!-- 🏓 球皮選擇 (NEW) -->
+            <div class="bg-gray-900/80 p-2.5 rounded border border-gray-700 space-y-1.5">
+                <span class="font-bold text-rose-400 block">🏓 擊球球皮面選擇：</span>
+                <div class="grid grid-cols-2 gap-2">
+                    <label class="flex items-center space-x-2 cursor-pointer bg-gray-800 p-1.5 rounded border border-rose-500/50 hover:bg-gray-700">
+                        <input type="radio" name="rubber_side" value="red" checked onchange="updatePositionsFromUI()" class="accent-rose-500">
+                        <span class="text-rose-400 font-bold">🔴 紅面擊球</span>
+                    </label>
+                    <label class="flex items-center space-x-2 cursor-pointer bg-gray-800 p-1.5 rounded border border-gray-500/50 hover:bg-gray-700">
+                        <input type="radio" name="rubber_side" value="black" onchange="updatePositionsFromUI()" class="accent-gray-400">
+                        <span class="text-gray-300 font-bold">⚫ 黑面擊球</span>
+                    </label>
+                </div>
+            </div>
+
+            <!-- 擊球 3D 位置 -->
+            <div class="bg-gray-900/80 p-2.5 rounded border border-gray-700 space-y-2">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="font-bold text-amber-400">📍 擊球點位置:</span>
+                    <span class="text-[10px] text-red-400 font-bold">🔴 端線微小紅點為基準點</span>
+                </div>
+                <div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-300">左右位置 (X)</span>
+                        <span id="val-posx" class="text-emerald-400 font-mono">-0.45 m</span>
+                    </div>
+                    <input type="range" id="input-posx" min="-0.80" max="0.80" value="-0.45" step="0.05" class="w-full accent-emerald-500">
+                </div>
+                <div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-300">擊球高度 (Y)</span>
+                        <span id="val-posy" class="text-emerald-400 font-mono">0.98 m</span>
+                    </div>
+                    <input type="range" id="input-posy" min="0.76" max="1.40" value="0.98" step="0.02" class="w-full accent-emerald-500">
+                </div>
+                <div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-300">離桌距離 (Z 端線前後)</span>
+                        <span id="val-posz" class="text-emerald-400 font-mono">1.48 m</span>
+                    </div>
+                    <input type="range" id="input-posz" min="1.37" max="1.95" value="1.48" step="0.02" class="w-full accent-emerald-500">
+                </div>
+            </div>
+
+            <!-- 球拍姿態 -->
+            <div class="bg-gray-900/80 p-2.5 rounded border border-gray-700 space-y-2">
+                <span class="font-bold text-sky-400 block mb-1">📐 球拍姿態 (俯仰與偏角):</span>
+                <div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-300">拍面俯仰角 (前壓 - / 開拍 +)</span>
+                        <span id="val-racket-pitch" class="text-emerald-400 font-mono">30° (開拍)</span>
+                    </div>
+                    <input type="range" id="input-racket-pitch" min="-30" max="60" value="30" step="1" class="w-full accent-emerald-500">
+                </div>
+                <div>
+                    <div class="flex justify-between">
+                        <span class="text-gray-300">拍面朝向 (拍尖偏角)</span>
+                        <span id="val-racket-yaw" class="text-emerald-400 font-mono">25° (朝右)</span>
+                    </div>
+                    <input type="range" id="input-racket-yaw" min="-60" max="60" value="25" step="1" class="w-full accent-emerald-500">
+                </div>
+            </div>
+
+            <!-- 動力學參數 -->
+            <div>
+                <div class="flex justify-between mb-1">
+                    <span class="text-gray-300">發球初速 (Speed)</span>
+                    <span id="val-speed" class="text-emerald-400 font-mono">15 km/h</span>
+                </div>
+                <input type="range" id="input-speed" min="8" max="60" value="15" class="w-full accent-emerald-500">
+            </div>
+
+            <div>
+                <div class="flex justify-between mb-1">
+                    <span class="text-gray-300">旋轉轉速 (Spin RPM)</span>
+                    <span id="val-rpm" class="text-emerald-400 font-mono">2500 RPM</span>
+                </div>
+                <input type="range" id="input-rpm" min="0" max="6000" value="2500" step="100" class="w-full accent-emerald-500">
+            </div>
+
+            <div>
+                <div class="flex justify-between mb-1">
+                    <span class="text-gray-300">上旋(+) / 下旋(-)</span>
+                    <span id="val-topspin" class="text-emerald-400 font-mono">-0.8 (強下旋)</span>
+                </div>
+                <input type="range" id="input-topspin" min="-1" max="1" value="-0.8" step="0.1" class="w-full accent-emerald-500">
+            </div>
+
+            <div>
+                <div class="flex justify-between mb-1">
+                    <span class="text-gray-300">右側旋(+) / 左側旋(-)</span>
+                    <span id="val-sidespin" class="text-emerald-400 font-mono">0.0 (無側旋)</span>
+                </div>
+                <input type="range" id="input-sidespin" min="-1" max="1" value="0" step="0.1" class="w-full accent-emerald-500">
+            </div>
+
+            <div class="pt-1 grid grid-cols-2 gap-2">
+                <button onclick="startServeAnimation()" class="py-2 bg-emerald-600 hover:bg-emerald-500 rounded text-sm font-bold transition flex items-center justify-center gap-1">
+                    🚀 發球模擬 (揮拍)
+                </button>
+                <button onclick="resetBall()" class="py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm font-medium transition">
+                    🔄 重置位置
+                </button>
+            </div>
+
+            <button onclick="resetCamera()" class="w-full py-1 bg-gray-800 hover:bg-gray-700 border border-gray-600 rounded text-gray-300 text-xs">
+                🎥 復位 3D 視角
+            </button>
+        </div>
+
+        <div class="mt-3 p-2 bg-gray-950/80 border border-emerald-500/30 rounded-lg text-[11px] text-gray-300 space-y-1">
+            <p class="font-bold text-emerald-400">💡 當前模擬狀態：</p>
+            <p id="info-level" class="text-amber-300">等級：正手切球 (下旋)</p>
+            <p id="info-status" class="text-emerald-400 font-bold">狀態：順暢落檯 🟢</p>
+            <p id="info-desc" class="text-gray-400">已啟用球拍雙面膠皮（紅/黑）與動態發球揮拍軌跡。</p>
+        </div>
+    </div>
+
+    <script>
+        const PHYSICS = {
+            m: 0.0027, r: 0.02, g: 9.81, rho: 1.225, Cd: 0.45,
+            tableHeight: 0.76, tableLength: 2.74, tableWidth: 1.525, netHeight: 0.1525,
+            restitutionTable: 0.82, frictionTable: 0.20, dt: 0.0015
+        };
+
+        let scene, camera, renderer, controls;
+        let tableGroup, ball, racketGroup, trajectoryLine, benchmarkDot;
+        
+        let initialPos = new THREE.Vector3(-0.45, 0.98, 1.48);
+
+        let ballState = {
+            pos: initialPos.clone(),
+            vel: new THREE.Vector3(0, 0, 0),
+            omega: new THREE.Vector3(0, 0, 0),
+            isFlying: false
+        };
+
+        // 動畫控制變數
+        let animState = {
+            isAnimating: false,
+            phase: 'idle', // 'backswing', 'forward', 'follow', 'idle'
+            progress: 0,
+            racketStartPos: new THREE.Vector3(),
+            racketTargetPos: new THREE.Vector3()
+        };
+
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x111827);
+
+            camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(2.6, 1.9, 2.6);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.target.set(0, 0.76, 0);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight.position.set(3, 5, 2);
+            dirLight.castShadow = true;
+            scene.add(dirLight);
+
+            createTable();
+            createBenchmarkMarker();
+            createRacketWithRubbers(); // 雙面膠皮球拍
+            createBall();
+            initTrajectoryLine();
+            bindUIEvents();
+            
+            applyPreset('fh_cut');
+
+            window.addEventListener('resize', onWindowResize);
+            animate();
+        }
+
+        function createTable() {
+            tableGroup = new THREE.Group();
+            
+            const topGeo = new THREE.BoxGeometry(PHYSICS.tableWidth, 0.05, PHYSICS.tableLength);
+            const topMat = new THREE.MeshStandardMaterial({ color: 0x1d4ed8, roughness: 0.4 });
+            const tableTop = new THREE.Mesh(topGeo, topMat);
+            tableTop.position.y = PHYSICS.tableHeight - 0.025;
+            tableTop.receiveShadow = true;
+            tableGroup.add(tableTop);
+
+            const netGeo = new THREE.BoxGeometry(PHYSICS.tableWidth + 0.1, PHYSICS.netHeight, 0.008);
+            const netMat = new THREE.MeshStandardMaterial({ color: 0xeeeeee, transparent: true, opacity: 0.75 });
+            const net = new THREE.Mesh(netGeo, netMat);
+            net.position.set(0, PHYSICS.tableHeight + PHYSICS.netHeight / 2, 0);
+            tableGroup.add(net);
+
+            const lineMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+            const centerLine = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.051, PHYSICS.tableLength), lineMat);
+            centerLine.position.y = PHYSICS.tableHeight - 0.024;
+            tableGroup.add(centerLine);
+
+            scene.add(tableGroup);
+        }
+
+        function createBenchmarkMarker() {
+            const markerGeo = new THREE.SphereGeometry(0.006, 16, 16);
+            const markerMat = new THREE.MeshStandardMaterial({ color: 0xef4444, roughness: 0.2, emissive: 0x991b1b });
+            benchmarkDot = new THREE.Mesh(markerGeo, markerMat);
+            benchmarkDot.position.set(0, PHYSICS.tableHeight + 0.003, PHYSICS.tableLength / 2);
+            scene.add(benchmarkDot);
+        }
+
+        // 建立擁有平面紅黑膠皮與木質夾層的球拍
+        function createRacketWithRubbers() {
+            racketGroup = new THREE.Group();
+
+            // 1. 木質底板 (Wood Core)
+            const woodGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.005, 32);
+            const woodMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.5 });
+            const woodCore = new THREE.Mesh(woodGeo, woodMat);
+            woodCore.rotation.x = Math.PI / 2;
+            racketGroup.add(woodCore);
+
+            // 2. 紅色膠皮 (Red Rubber Front)
+            const redGeo = new THREE.CylinderGeometry(0.08, 0.08, 0.002, 32);
+            const redMat = new THREE.MeshStandardMaterial({ color: 0xd97706, roughness: 0.2 }); // 鮮亮紅色
+            const redRubber = new THREE.Mesh(redGeo, redMat);
+            redRubber.rotation.x = Math.PI / 2;
+            redRubber.position.z = -0.0035; // 正面
+            racketGroup.add(redRubber);
+
+            // 3. 黑色膠皮 (Black Rubber Back)
+            const blackMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.2 }); // 黑色
+            const blackRubber = new THREE.Mesh(redGeo, blackMat);
+            blackRubber.rotation.x = Math.PI / 2;
+            blackRubber.position.z = 0.0035; // 反面
+            racketGroup.add(blackRubber);
+
+            // 4. 拍柄 (Handle)
+            const handleGeo = new THREE.CylinderGeometry(0.012, 0.015, 0.1, 16);
+            const handleMat = new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.6 });
+            const handle = new THREE.Mesh(handleGeo, handleMat);
+            handle.position.y = -0.11;
+            racketGroup.add(handle);
+
+            racketGroup.position.set(initialPos.x, initialPos.y, initialPos.z + 0.04);
+            scene.add(racketGroup);
+        }
+
+        function createBall() {
+            const ballGeo = new THREE.SphereGeometry(PHYSICS.r, 32, 32);
+            const canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#f59e0b'; ctx.fillRect(0,0,128,128);
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0,56,128,16);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const ballMat = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.3 });
+            
+            ball = new THREE.Mesh(ballGeo, ballMat);
+            ball.castShadow = true;
+            ball.position.copy(initialPos);
+            scene.add(ball);
+        }
+
+        function initTrajectoryLine() {
+            const lineMat = new THREE.LineDashedMaterial({
+                color: 0x10b981, dashSize: 0.04, gapSize: 0.02, linewidth: 2
+            });
+            trajectoryLine = new THREE.Line(new THREE.BufferGeometry(), lineMat);
+            scene.add(trajectoryLine);
+        }
+
+        function computeForces(vel, omega) {
+            const v = vel.length();
+            if (v === 0) return new THREE.Vector3(0, 0, 0);
+
+            const Fg = new THREE.Vector3(0, -PHYSICS.m * PHYSICS.g, 0);
+            const A = Math.PI * PHYSICS.r * PHYSICS.r;
+            const FdMag = 0.5 * PHYSICS.rho * v * v * A * PHYSICS.Cd;
+            const Fd = vel.clone().normalize().multiplyScalar(-FdMag);
+
+            const spinRate = omega.length();
+            let Fm = new THREE.Vector3(0, 0, 0);
+            if (spinRate > 0) {
+                const S = (PHYSICS.r * spinRate) / v;
+                const Cl = Math.min(0.28, 0.20 * S);
+                const FmMag = 0.5 * PHYSICS.rho * v * v * A * Cl;
+                const spinAxis = omega.clone().normalize();
+                const liftDir = new THREE.Vector3().crossVectors(spinAxis, vel).normalize();
+                Fm = liftDir.multiplyScalar(FmMag);
+            }
+
+            return Fg.add(Fd).add(Fm);
+        }
+
+        function handleTableBounce(pos, vel, omega) {
+            vel.y = -vel.y * PHYSICS.restitutionTable;
+            const vTangentialX = vel.x - omega.y * PHYSICS.r;
+            const vTangentialZ = vel.z + omega.x * PHYSICS.r;
+
+            vel.x -= PHYSICS.frictionTable * vTangentialX;
+            vel.z -= PHYSICS.frictionTable * vTangentialZ;
+
+            omega.multiplyScalar(0.75);
+            pos.y = PHYSICS.tableHeight + PHYSICS.r;
+        }
+
+        function checkNetCollision(prevPos, currPos) {
+            if ((prevPos.z > 0 && currPos.z <= 0) || (prevPos.z < 0 && currPos.z >= 0)) {
+                if (Math.abs(currPos.x) <= (PHYSICS.tableWidth / 2 + 0.05) && currPos.y <= (PHYSICS.tableHeight + PHYSICS.netHeight)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function getInitialStateFromUI() {
+            const speedKmh = parseFloat(document.getElementById('input-speed').value);
+            const speedMs = speedKmh / 3.6;
+
+            const rackPitchDeg = parseFloat(document.getElementById('input-racket-pitch').value);
+            const rackYawDeg = parseFloat(document.getElementById('input-racket-yaw').value);
+
+            const pitchRad = rackPitchDeg * (Math.PI / 180);
+            const yawRad = rackYawDeg * (Math.PI / 180);
+
+            const vy = speedMs * Math.sin(pitchRad * 0.5);
+            const vHoriz = speedMs * Math.cos(pitchRad * 0.5);
+            
+            const vx = vHoriz * Math.sin(yawRad * 0.4);
+            const vz = -vHoriz * Math.cos(yawRad * 0.4);
+
+            const vel = new THREE.Vector3(vx, vy, vz);
+
+            const rpm = parseFloat(document.getElementById('input-rpm').value);
+            const radSec = rpm * (2 * Math.PI / 60);
+
+            const topspin = parseFloat(document.getElementById('input-topspin').value);
+            const sidespin = parseFloat(document.getElementById('input-sidespin').value);
+
+            const omega = new THREE.Vector3(topspin * radSec, sidespin * radSec, 0);
+
+            return { vel, omega };
+        }
+
+        function applyPreset(type) {
+            if (type === 'fh_flat') {
+                setUIValues(-0.30, 1.05, 1.48, 12, 10, 14, 200, 0.1, 0, "正手平球 (不轉)");
+            } else if (type === 'fh_cut') {
+                setUIValues(-0.45, 0.98, 1.48, 30, 25, 15, 2500, -0.8, 0, "正手切球 (下旋)");
+            } else if (type === 'bh_cut') {
+                setUIValues(0.35, 0.98, 1.48, 28, -25, 14, 2200, -0.7, -0.2, "反手切球 (下旋)");
+            } else if (type === 'fh_fast') {
+                setUIValues(-0.20, 0.92, 1.52, -5, 5, 28, 1800, 0.4, 0, "正手奔球 (急長)");
+            } else if (type === 'fh_top_side') {
+                setUIValues(-0.40, 0.98, 1.48, 15, 30, 20, 3000, 0.5, 0.6, "正手右側上旋");
+            } else if (type === 'bh_left_side') {
+                setUIValues(0.30, 0.98, 1.48, 20, -30, 18, 2800, -0.4, -0.6, "反手左側下旋");
+            }
+            updateTrajectoryPrediction();
+        }
+
+        function setUIValues(posX, posY, posZ, rackPitch, rackYaw, speed, rpm, topspin, sidespin, titleName) {
+            document.getElementById('input-posx').value = posX;
+            document.getElementById('input-posy').value = posY;
+            document.getElementById('input-posz').value = posZ;
+            document.getElementById('input-racket-pitch').value = rackPitch;
+            document.getElementById('input-racket-yaw').value = rackYaw;
+            document.getElementById('input-speed').value = speed;
+            document.getElementById('input-rpm').value = rpm;
+            document.getElementById('input-topspin').value = topspin;
+            document.getElementById('input-sidespin').value = sidespin;
+            
+            document.getElementById('info-level').innerText = `等級：${titleName}`;
+            updatePositionsFromUI();
+        }
+
+        function updateTrajectoryPrediction() {
+            if (ballState.isFlying || animState.isAnimating) return;
+
+            const { vel, omega } = getInitialStateFromUI();
+            const points = [];
+            let currPos = initialPos.clone();
+            let currVel = vel.clone();
+            let currOmega = omega.clone();
+
+            points.push(currPos.clone());
+            let simBounced = false;
+            let bounceCount = 0;
+            let simHitNet = false;
+
+            for (let t = 0; t < 2.0; t += PHYSICS.dt) {
+                let prevPos = currPos.clone();
+
+                const forces = computeForces(currVel, currOmega);
+                const accel = forces.divideScalar(PHYSICS.m);
+
+                currVel.add(accel.clone().multiplyScalar(PHYSICS.dt));
+                currPos.add(currVel.clone().multiplyScalar(PHYSICS.dt));
+
+                currOmega.multiplyScalar(0.999);
+
+                if (checkNetCollision(prevPos, currPos)) {
+                    simHitNet = true;
+                    currVel.z = -currVel.z * 0.1;
+                    currVel.y = -0.5;
+                }
+
+                if (!simHitNet && currPos.y - PHYSICS.r <= PHYSICS.tableHeight) {
+                    if (Math.abs(currPos.z) <= PHYSICS.tableLength / 2 && Math.abs(currPos.x) <= PHYSICS.tableWidth / 2) {
+                        handleTableBounce(currPos, currVel, currOmega);
+                        simBounced = true;
+                        bounceCount++;
+                    }
+                }
+
+                points.push(currPos.clone());
+
+                if (bounceCount >= 2 || currPos.y < 0.2 || Math.abs(currPos.z) > 2.2 || Math.abs(currPos.x) > 1.5) {
+                    break;
+                }
+            }
+
+            trajectoryLine.geometry.setFromPoints(points);
+            trajectoryLine.computeLineDistances();
+
+            updateEvaluatorPrompt(simBounced, simHitNet);
+        }
+
+        function updateEvaluatorPrompt(bounced, hitNet) {
+            let statusTxt = "狀態：順暢落檯 🟢";
+            let descTxt = "已連動選定膠皮面與發球揮拍軌跡。";
+
+            if (hitNet) {
+                statusTxt = "狀態：⚠️ 掛網未過網";
+                descTxt = "球速不夠或下旋過重，請微調仰角（開拍）或提高速度。";
+            } else if (!bounced) {
+                statusTxt = "狀態：❌ 飛出界 (未落檯)";
+                descTxt = "速度過快或開拍仰角過大，請前壓拍面或降低速度。";
+            }
+
+            document.getElementById('info-status').innerText = statusTxt;
+            document.getElementById('info-desc').innerText = descTxt;
+        }
+
+        function updatePositionsFromUI() {
+            const posX = parseFloat(document.getElementById('input-posx').value);
+            const posY = parseFloat(document.getElementById('input-posy').value);
+            const posZ = parseFloat(document.getElementById('input-posz').value);
+            const rackPitch = parseFloat(document.getElementById('input-racket-pitch').value);
+            const rackYaw = parseFloat(document.getElementById('input-racket-yaw').value);
+            const speed = parseFloat(document.getElementById('input-speed').value);
+            const rpm = parseFloat(document.getElementById('input-rpm').value);
+            const topspin = parseFloat(document.getElementById('input-topspin').value);
+            const sidespin = parseFloat(document.getElementById('input-sidespin').value);
+
+            // 膠皮選定 (紅面 vs 黑面)
+            const rubberSide = document.querySelector('input[name="rubber_side"]:checked').value;
+
+            initialPos.set(posX, posY, posZ);
+            ball.position.copy(initialPos);
+            
+            // 基礎姿態
+            racketGroup.position.set(initialPos.x, initialPos.y, initialPos.z + 0.04);
+            
+            let pitchRad = rackPitch * (Math.PI / 180);
+            let yawRad = rackYaw * (Math.PI / 180);
+
+            // 若選擇黑面擊球，球拍自動旋轉 180 度將黑面翻至正面
+            let rollRad = (rubberSide === 'black') ? Math.PI : 0;
+
+            racketGroup.rotation.set(pitchRad, yawRad, rollRad);
+
+            document.getElementById('val-posx').innerText = `${posX} m`;
+            document.getElementById('val-posy').innerText = `${posY} m`;
+            document.getElementById('val-posz').innerText = `${posZ} m`;
+            document.getElementById('val-racket-pitch').innerText = `${rackPitch}° (${rackPitch > 0 ? '開拍' : '前壓'})`;
+            document.getElementById('val-racket-yaw').innerText = `${rackYaw}° (${rackYaw > 0 ? '朝右' : rackYaw < 0 ? '朝左' : '正對'})`;
+            document.getElementById('val-speed').innerText = `${speed} km/h`;
+            document.getElementById('val-rpm').innerText = `${rpm} RPM`;
+            document.getElementById('val-topspin').innerText = topspin > 0 ? `+${topspin} (上旋)` : topspin < 0 ? `${topspin} (下旋)` : '0.0 (不轉)';
+            document.getElementById('val-sidespin').innerText = sidespin > 0 ? `+${sidespin} (右側旋)` : sidespin < 0 ? `${sidespin} (左側旋)` : '0.0 (無側旋)';
+
+            updateTrajectoryPrediction();
+        }
+
+        // 發球揮拍動畫觸發 (Animation Trigger)
+        function startServeAnimation() {
+            if (ballState.isFlying || animState.isAnimating) resetBall();
+
+            animState.isAnimating = true;
+            animState.phase = 'backswing';
+            animState.progress = 0;
+
+            // 記錄基準打擊點
+            animState.racketTargetPos.set(initialPos.x, initialPos.y, initialPos.z + 0.02);
+            animState.racketStartPos.set(initialPos.x, initialPos.y + 0.1, initialPos.z + 0.25); // 引拍後退位置
+        }
+
+        function updateRacketAnimation() {
+            if (!animState.isAnimating) return;
+
+            animState.progress += 0.05;
+
+            if (animState.phase === 'backswing') {
+                // 1. 引拍：向後向上拉拍
+                racketGroup.position.lerpVectors(
+                    new THREE.Vector3(initialPos.x, initialPos.y, initialPos.z + 0.04),
+                    animState.racketStartPos,
+                    animState.progress
+                );
+                if (animState.progress >= 1.0) {
+                    animState.phase = 'forward';
+                    animState.progress = 0;
+                }
+            } else if (animState.phase === 'forward') {
+                // 2. 擊球：快速揮向前接觸球體
+                racketGroup.position.lerpVectors(
+                    animState.racketStartPos,
+                    animState.racketTargetPos,
+                    animState.progress
+                );
+                if (animState.progress >= 1.0) {
+                    // 觸球瞬間！觸發球體物理飛行
+                    animState.phase = 'follow';
+                    animState.progress = 0;
+                    serveBall();
+                }
+            } else if (animState.phase === 'follow') {
+                // 3. 隨勢還原
+                const followPos = new THREE.Vector3(initialPos.x, initialPos.y - 0.05, initialPos.z - 0.1);
+                racketGroup.position.lerpVectors(
+                    animState.racketTargetPos,
+                    followPos,
+                    animState.progress
+                );
+                if (animState.progress >= 1.0) {
+                    animState.isAnimating = false;
+                    animState.phase = 'idle';
+                    updatePositionsFromUI(); // 歸位
+                }
+            }
+        }
+
+        function serveBall() {
+            const { vel, omega } = getInitialStateFromUI();
+            ballState.pos.copy(initialPos);
+            ballState.vel.copy(vel);
+            ballState.omega.copy(omega);
+            ballState.isFlying = true;
+        }
+
+        function resetBall() {
+            ballState.isFlying = false;
+            animState.isAnimating = false;
+            animState.phase = 'idle';
+            ballState.pos.copy(initialPos);
+            ball.position.copy(initialPos);
+            ball.rotation.set(0, 0, 0);
+            updatePositionsFromUI();
+        }
+
+        function updatePhysics() {
+            if (!ballState.isFlying) return;
+
+            let prevPos = ballState.pos.clone();
+
+            const forces = computeForces(ballState.vel, ballState.omega);
+            const accel = forces.divideScalar(PHYSICS.m);
+
+            ballState.vel.add(accel.multiplyScalar(PHYSICS.dt));
+            ballState.pos.add(ballState.vel.clone().multiplyScalar(PHYSICS.dt));
+            ballState.omega.multiplyScalar(0.999);
+
+            if (checkNetCollision(prevPos, ballState.pos)) {
+                ballState.vel.z = -ballState.vel.z * 0.1;
+                ballState.vel.y = -0.5;
+            }
+
+            if (ballState.pos.y - PHYSICS.r <= PHYSICS.tableHeight) {
+                if (Math.abs(ballState.pos.z) <= PHYSICS.tableLength / 2 && Math.abs(ballState.pos.x) <= PHYSICS.tableWidth / 2) {
+                    if (ballState.vel.y < 0) {
+                        handleTableBounce(ballState.pos, ballState.vel, ballState.omega);
+                    }
+                }
+            }
+
+            ball.position.copy(ballState.pos);
+
+            const rotStep = ballState.omega.clone().multiplyScalar(PHYSICS.dt);
+            ball.rotation.x += rotStep.x;
+            ball.rotation.y += rotStep.y;
+
+            if (ballState.pos.y < 0 || Math.abs(ballState.pos.z) > 3.0) {
+                ballState.isFlying = false;
+            }
+        }
+
+        function bindUIEvents() {
+            const inputs = ['posx', 'posy', 'posz', 'racket-pitch', 'racket-yaw', 'speed', 'rpm', 'topspin', 'sidespin'];
+            inputs.forEach(id => {
+                document.getElementById(`input-${id}`).addEventListener('input', updatePositionsFromUI);
+            });
+        }
+
+        function resetCamera() {
+            camera.position.set(2.6, 1.9, 2.6);
+            controls.target.set(0, 0.76, 0);
+            controls.update();
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            updateRacketAnimation(); // 揮拍動態
+            updatePhysics();         // 球體物理
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        init();
+    </script>
+</body>
+</html>
